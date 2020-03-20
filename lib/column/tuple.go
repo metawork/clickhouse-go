@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/lib/binary"
+	"github.com/ClickHouse/clickhouse-go/lib/types"
 )
 
 type Tuple struct {
@@ -19,7 +20,7 @@ func (tuple *Tuple) Read(decoder *binary.Decoder) (interface{}, error) {
 }
 
 func (tuple *Tuple) ReadTuple(decoder *binary.Decoder, rows int) (_ []interface{}, err error) {
-	var values = make([][]interface{}, rows)
+	var values = make([]types.Tuple, rows)
 
 	for _, c := range tuple.columns {
 
@@ -104,7 +105,7 @@ func parseTuple(name, chType string, timezone *time.Location) (*Tuple, error) {
 		base: base{
 			name:    name,
 			chType:  columnType,
-			valueOf: reflect.ValueOf([]interface{}{}),
+			valueOf: reflect.ValueOf(Tuple{}),
 		},
 		columns: columns,
 	}, nil

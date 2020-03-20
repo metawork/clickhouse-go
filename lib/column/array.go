@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/lib/binary"
+	"github.com/ClickHouse/clickhouse-go/lib/types"
 )
 
 type Array struct {
@@ -48,16 +49,25 @@ func (array *Array) ReadArray(decoder *binary.Decoder, rows int) (_ []interface{
 	return values, nil
 }
 
-func (array *Array) read(decoder *binary.Decoder, ln int) (interface{}, error) {
-	slice := reflect.MakeSlice(array.valueOf.Type(), 0, ln)
-	for i := 0; i < ln; i++ {
-		value, err := array.column.Read(decoder)
+func (array *Array) read(decoder *binary.Decoder, ln int) (_ interface{}, err error) {
+	switch t := array.column.(type) {
+	case *Tuple:
+		slice, err := t.ReadTuple(decoder, ln)
 		if err != nil {
 			return nil, err
 		}
-		slice = reflect.Append(slice, reflect.ValueOf(value))
+		return slice, nil
+	default:
+		slice := reflect.MakeSlice(array.valueOf.Type(), 0, ln)
+		for i := 0; i < ln; i++ {
+			value, err := array.column.Read(decoder)
+			if err != nil {
+				return nil, err
+			}
+			slice = reflect.Append(slice, reflect.ValueOf(value))
+		}
+		return slice.Interface(), nil
 	}
-	return slice.Interface(), nil
 }
 
 func (array *Array) Depth() int {
@@ -89,35 +99,39 @@ loop:
 	}
 
 	var scanType interface{}
-	switch t := column.ScanType(); t {
-	case arrayBaseTypes[int8(0)]:
-		scanType = []int8{}
-	case arrayBaseTypes[int16(0)]:
-		scanType = []int16{}
-	case arrayBaseTypes[int32(0)]:
-		scanType = []int32{}
-	case arrayBaseTypes[int64(0)]:
-		scanType = []int64{}
-	case arrayBaseTypes[uint8(0)]:
-		scanType = []uint8{}
-	case arrayBaseTypes[uint16(0)]:
-		scanType = []uint16{}
-	case arrayBaseTypes[uint32(0)]:
-		scanType = []uint32{}
-	case arrayBaseTypes[uint64(0)]:
-		scanType = []uint64{}
-	case arrayBaseTypes[float32(0)]:
-		scanType = []float32{}
-	case arrayBaseTypes[float64(0)]:
-		scanType = []float64{}
-	case arrayBaseTypes[string("")]:
-		scanType = []string{}
-	case arrayBaseTypes[time.Time{}]:
-		scanType = []time.Time{}
-	case arrayBaseTypes[IPv4{}], arrayBaseTypes[IPv6{}]:
-		scanType = []net.IP{}
-	default:
-		return nil, fmt.Errorf("unsupported Array type '%s'", column.ScanType().Name())
+	if column.ScanType() == reflect.ValueOf(Tuple{}).Type() {
+		scanType = []types.Tuple{}
+	} else {
+		switch t := column.ScanType(); t {
+		case arrayBaseTypes[int8(0)]:
+			scanType = []int8{}
+		case arrayBaseTypes[int16(0)]:
+			scanType = []int16{}
+		case arrayBaseTypes[int32(0)]:
+			scanType = []int32{}
+		case arrayBaseTypes[int64(0)]:
+			scanType = []int64{}
+		case arrayBaseTypes[uint8(0)]:
+			scanType = []uint8{}
+		case arrayBaseTypes[uint16(0)]:
+			scanType = []uint16{}
+		case arrayBaseTypes[uint32(0)]:
+			scanType = []uint32{}
+		case arrayBaseTypes[uint64(0)]:
+			scanType = []uint64{}
+		case arrayBaseTypes[float32(0)]:
+			scanType = []float32{}
+		case arrayBaseTypes[float64(0)]:
+			scanType = []float64{}
+		case arrayBaseTypes[string("")]:
+			scanType = []string{}
+		case arrayBaseTypes[time.Time{}]:
+			scanType = []time.Time{}
+		case arrayBaseTypes[IPv4{}], arrayBaseTypes[IPv6{}]:
+			scanType = []net.IP{}
+		default:
+			return nil, fmt.Errorf("unsupported Array type '%s'", column.ScanType().Name())
+		}
 	}
 	return &Array{
 		base: base{
